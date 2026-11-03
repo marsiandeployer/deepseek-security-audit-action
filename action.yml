@@ -93,6 +93,8 @@ runs:
       env:
         ACTION_ROOT: ${{ github.action_path }}
         DEEPSEEK_API_KEY: ${{ inputs.deepseek-api-key }}
+        AUDITOR_REPOSITORY: ${{ github.action_repository }}
+        AUDITOR_REF: ${{ github.action_ref }}
         AUDIT_BASE: ${{ steps.context.outputs.base }}
         AUDIT_HEAD: ${{ steps.context.outputs.head }}
         AUDIT_TARGET: ${{ github.workspace }}/${{ steps.context.outputs.checkout_path }}

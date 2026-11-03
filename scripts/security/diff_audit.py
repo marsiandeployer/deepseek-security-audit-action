@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Review a PR diff as inert text using a pinned, tool-free DeepSeek Harness."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class AuditError(Exception):
     pass
+
+
+def auditor_instructions():
+    profile = (ROOT / 'instructions/security-auditor.md').read_text(encoding='utf-8')
+    if not profile.strip() or len(profile.encode()) > 16_000:
+        raise AuditError('Auditor instruction profile is empty or oversized')
+    return profile
 
 
 def git(repo, *args):
@@ -245,6 +253,7 @@ def safe_failure_diagnostics(stdout, stderr, key, returncode):
 def run_harness(prompt, cli, key):
     # Empty cwd/home: no repository AGENTS, plugins, credentials, or Git metadata.
     settings = runtime_settings()
+    profile = auditor_instructions()
     with tempfile.TemporaryDirectory(prefix='deepseek-audit-') as directory:
         home = Path(directory)
         env = harness_environment(home, key)
@@ -266,6 +275,7 @@ def run_harness(prompt, cli, key):
                         f'    reasoningEffort: {settings["effort"]}\n    maxTokens: {settings["max_tokens"]}\n'
                         '- id: agent-default-model\n  config:\n    provider: deepseek-official\n'
                         f'    model: {json.dumps(settings["model"])}\n')
+            overlay += '- id: system-prompt\n  config:\n    personaPrefix: ' + json.dumps(profile, ensure_ascii=False) + '\n'
             patch = home / 'audit.patch.yml'
             patch.write_text(overlay)
             result = subprocess.run(command + ['--patch', str(patch), '--json', '-'], input=prompt,
@@ -388,6 +398,9 @@ def main():
     report = dict(status='ERROR', base=args.base, head=args.head,
                   kind='static-pr-diff', findings=[])
     try:
+        report['auditor'] = dict(repository=os.environ.get('AUDITOR_REPOSITORY', ''),
+                                ref=os.environ.get('AUDITOR_REF', ''),
+                                profile_sha256=hashlib.sha256(auditor_instructions().encode()).hexdigest())
         key = os.environ.get('DEEPSEEK_API_KEY', '').strip()
         scope = collect_diff(args.repo, args.base, args.head)
         if not scope['files']:

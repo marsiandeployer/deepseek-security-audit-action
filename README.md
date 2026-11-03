@@ -116,3 +116,20 @@ it does not claim to be a language-specific dependency scanner for every consume
 - [Claude Code Action security](https://github.com/anthropics/claude-code-action/blob/main/docs/security.md): trusted workflow code, untrusted PR data, minimal credentials.
 - [PR-Agent compression](https://docs.pr-agent.ai/core-abilities/compression_strategy/): context budgeting; this action preserves deletions and reports missing coverage rather than dropping files.
 - [Gemini PR review](https://github.com/google-github-actions/run-gemini-cli/tree/main/examples/workflows/pr-review): reusable review job and failure reporting.
+
+## Auditor instruction profile
+
+The versioned [security auditor profile](instructions/security-auditor.md) applies
+the operator's requested engineering principles to this task: inspect the complete
+scope, collect all findings, require concrete source-to-sink evidence, calibrate
+severity and distinguish assumptions from observed facts. Adversarial component
+names alone are not findings. Output remains the controller's structured JSON.
+The general translation and creative-writing portions of the supplied operating
+specification are outside this static review role.
+
+The profile is loaded from the pinned Action, installed as the Harness system
+persona, and fingerprinted in the JSON report. Consumer `AGENTS.md` or embedded
+policies cannot replace it. Tools, credential access and publication authority
+remain controller-owned. [Copyable consumer workflow](examples/security-audit.yml)
+contains the entire per-repository integration in one file; pin its action version
+before use. All runtime files and the npm lockfile stay here.

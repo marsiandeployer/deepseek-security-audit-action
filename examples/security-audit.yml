@@ -1,0 +1,26 @@
+name: Security audit report
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to review
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: security-report-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # Replace the release tag with its reviewed full commit SHA in production.
+      - uses: marsiandeployer/deepseek-security-audit-action@v1.0.0
+        with:
+          deepseek-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
+          pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}

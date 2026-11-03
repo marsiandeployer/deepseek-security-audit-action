@@ -273,6 +273,7 @@ class DiffAuditTests(unittest.TestCase):
             self.assertFalse(body.get('tools'))
             self.assertNotIn('dsh_session_log', body)
             self.assertNotIn('dsh_plugin_packages', body)
+            self.assertIn('FULL_REVIEW', json.dumps(body.get('system')))
             self.assertIn('UNTRUSTED DIFF', json.dumps(body))
             reject.append(True)
             with patch.object(audit, 'harness_environment', side_effect=environment):
