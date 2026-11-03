@@ -1,0 +1,7 @@
+node_modules/
+__pycache__/
+*.pyc
+/artifacts/
+.env
+.env.*
+__security_audit_*/

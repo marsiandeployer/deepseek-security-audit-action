@@ -1,0 +1,37 @@
+name: Action checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/security/harness/package-lock.json
+      - name: Install locked runtime without lifecycle scripts
+        run: npm ci --prefix scripts/security/harness --ignore-scripts --no-audit --no-fund
+      - name: Unit and real CLI transport tests
+        env:
+          DSH_TEST_CLI: ${{ github.workspace }}/scripts/security/harness/node_modules/@deepseek-ai/dsh/lib/bin.js
+        run: python3 -m unittest discover -s tests/deployment -v
+      - name: Dependency advisory scan
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          npm audit --prefix scripts/security/harness --omit=dev --ignore-scripts --json > artifacts/dependency-audit.json
+      - name: Preserve dependency scan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dependency-audit
+          path: artifacts/dependency-audit.json
+          if-no-files-found: warn

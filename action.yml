@@ -1,0 +1,136 @@
+name: DeepSeek security diff report
+description: Review every PR diff part with isolated DeepSeek Harness and publish a non-blocking report
+inputs:
+  deepseek-api-key:
+    description: DeepSeek API key from the caller repository secret
+    required: true
+  github-token:
+    description: Caller repository token, used only for checkout and report publication
+    default: ${{ github.token }}
+  pr-number:
+    description: PR number; required for manual runs
+    default: ${{ github.event.pull_request.number }}
+  model:
+    description: DeepSeek model identifier
+    default: deepseek-flash
+  reasoning-effort:
+    description: off, low, high, or max; reported with the result
+    default: high
+  max-output-tokens:
+    description: Combined reasoning and final-answer token budget per call
+    default: '65536'
+  timeout-seconds:
+    description: Timeout of one model call
+    default: '480'
+  workers:
+    description: Concurrent review calls, from 1 to 4
+    default: '3'
+outputs:
+  report-status:
+    description: PASS, FINDINGS, PARTIAL, or ERROR; never a required merge status
+    value: ${{ steps.result.outputs.status }}
+  report-path:
+    description: Local path to the complete JSON report
+    value: ${{ steps.context.outputs.report_dir }}/report.json
+runs:
+  using: composite
+  steps:
+    - name: Resolve exact PR snapshot
+      id: context
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        AUDIT_PR: ${{ inputs.pr-number }}
+        ACTION_ROOT: ${{ github.action_path }}
+        SECURITY_MODEL: ${{ inputs.model }}
+        SECURITY_REASONING_EFFORT: ${{ inputs.reasoning-effort }}
+        SECURITY_MAX_OUTPUT_TOKENS: ${{ inputs.max-output-tokens }}
+        SECURITY_TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        SECURITY_WORKERS: ${{ inputs.workers }}
+      run: python3 "$ACTION_ROOT/scripts/security/action_context.py"
+
+    - name: Publish progress
+      shell: bash
+      env:
+        ACTION_ROOT: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        AUDIT_HEAD: ${{ steps.context.outputs.head }}
+        AUDIT_PR: ${{ steps.context.outputs.pr }}
+        REPORT_DIR: ${{ steps.context.outputs.report_dir }}
+      run: python3 "$ACTION_ROOT/scripts/security/publish_report.py" --report "$REPORT_DIR/report.json" --pr "$AUDIT_PR" --pending
+
+    - name: Read consumer source as inert data
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        repository: ${{ steps.context.outputs.repository }}
+        ref: ${{ steps.context.outputs.head }}
+        fetch-depth: 0
+        path: ${{ steps.context.outputs.checkout_path }}
+        token: ${{ inputs.github-token }}
+        persist-credentials: false
+
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '22'
+
+    - name: Install the action's pinned Harness
+      shell: bash
+      env:
+        ACTION_ROOT: ${{ github.action_path }}
+      run: npm ci --prefix "$ACTION_ROOT/scripts/security/harness" --ignore-scripts --no-audit --no-fund
+
+    - name: Review all parts and verify all candidates
+      shell: bash
+      env:
+        ACTION_ROOT: ${{ github.action_path }}
+        DEEPSEEK_API_KEY: ${{ inputs.deepseek-api-key }}
+        AUDIT_BASE: ${{ steps.context.outputs.base }}
+        AUDIT_HEAD: ${{ steps.context.outputs.head }}
+        AUDIT_TARGET: ${{ github.workspace }}/${{ steps.context.outputs.checkout_path }}
+        REPORT_DIR: ${{ steps.context.outputs.report_dir }}
+        SECURITY_MODEL: ${{ inputs.model }}
+        SECURITY_REASONING_EFFORT: ${{ inputs.reasoning-effort }}
+        SECURITY_MAX_OUTPUT_TOKENS: ${{ inputs.max-output-tokens }}
+        SECURITY_TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        SECURITY_WORKERS: ${{ inputs.workers }}
+      run: |
+        python3 "$ACTION_ROOT/scripts/security/diff_audit.py" \
+          --repo "$AUDIT_TARGET" --base "$AUDIT_BASE" --head "$AUDIT_HEAD" \
+          --cli "$ACTION_ROOT/scripts/security/harness/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+          --out "$REPORT_DIR"
+
+    - name: Publish complete informational PR report
+      if: always() && steps.context.outcome == 'success'
+      shell: bash
+      env:
+        ACTION_ROOT: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        AUDIT_HEAD: ${{ steps.context.outputs.head }}
+        AUDIT_PR: ${{ steps.context.outputs.pr }}
+        REPORT_DIR: ${{ steps.context.outputs.report_dir }}
+      run: python3 "$ACTION_ROOT/scripts/security/publish_report.py" --report "$REPORT_DIR/report.json" --pr "$AUDIT_PR"
+
+    - name: Expose report status
+      id: result
+      if: always() && steps.context.outcome == 'success'
+      shell: bash
+      env:
+        REPORT_DIR: ${{ steps.context.outputs.report_dir }}
+      run: |
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        path = Path(os.environ['REPORT_DIR'])/'report.json'
+        status = json.loads(path.read_text()).get('status', 'ERROR') if path.exists() else 'ERROR'
+        if status not in ('PASS','FINDINGS','PARTIAL','ERROR'): status = 'ERROR'
+        with open(os.environ['GITHUB_OUTPUT'],'a') as output: output.write('status='+status+'\n')
+        PY
+
+    - name: Preserve complete report
+      if: always() && steps.context.outcome == 'success'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: security-diff-${{ steps.context.outputs.head }}-${{ steps.context.outputs.checkout_path }}
+        path: ${{ steps.context.outputs.report_dir }}/
+        if-no-files-found: warn
+        retention-days: 14
