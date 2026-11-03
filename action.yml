@@ -59,15 +59,16 @@ runs:
         REPORT_DIR: ${{ steps.context.outputs.report_dir }}
       run: python3 "$ACTION_ROOT/scripts/security/publish_report.py" --report "$REPORT_DIR/report.json" --pr "$AUDIT_PR" --pending
 
-    - name: Read consumer source as inert data
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      with:
-        repository: ${{ steps.context.outputs.repository }}
-        ref: ${{ steps.context.outputs.head }}
-        fetch-depth: 0
-        path: ${{ steps.context.outputs.checkout_path }}
-        token: ${{ inputs.github-token }}
-        persist-credentials: false
+    - name: Fetch consumer Git objects as inert data
+      shell: bash
+      env:
+        ACTION_ROOT: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        SOURCE_REPOSITORY: ${{ steps.context.outputs.repository }}
+        SOURCE_DIRECTORY: ${{ github.workspace }}/${{ steps.context.outputs.checkout_path }}
+        AUDIT_BASE: ${{ steps.context.outputs.base }}
+        AUDIT_HEAD: ${{ steps.context.outputs.head }}
+      run: python3 "$ACTION_ROOT/scripts/security/fetch_source.py"
 
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:

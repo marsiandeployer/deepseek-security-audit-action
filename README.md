@@ -33,16 +33,17 @@ consumer is needed before this step. Add `DEEPSEEK_API_KEY` to each caller's
 Actions secrets; the central action repository does not need or store that key.
 The caller token needs only `contents: read` and `pull-requests: write`.
 
-This repository is private. Its Actions sharing policy permits other private
-repositories owned by the same account to download this generic tool. It contains
-no application code or deployment credentials. Private action sharing does not
-permit arbitrary external accounts or public callers; those require an explicitly
-chosen distribution/access policy.
+This Action repository is public and can be referenced from public or private
+consumer repositories. It contains only the generic auditor, tests and examples.
+Each caller supplies its own API key through Actions secrets; the key and the
+consumer's application source are not published in this repository.
 
 ## Behavior
 
 The controller obtains the current PR's exact base/head SHAs through GitHub API.
-It downloads consumer source into a separate directory solely for Git diff.
+It fetches consumer Git objects into a separate bare repository solely for Git diff.
+It does not check out files or traverse submodules, including malformed gitlinks.
+Fetch authentication exists only in the Git process environment and is not persisted.
 Consumer scripts, dependencies, workflows, AGENTS and plugins are never executed.
 The auditor and its pinned Harness are loaded from this action's immutable version,
 not from the PR. Each model process has an empty HOME/DSH_HOME/cwd, no tools,
