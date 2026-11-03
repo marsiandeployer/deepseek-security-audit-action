@@ -13,7 +13,7 @@ permissions:
   pull-requests: write
 concurrency:
   group: security-report-${{ github.event.pull_request.number || inputs.pr_number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   audit:
     runs-on: ubuntu-latest
