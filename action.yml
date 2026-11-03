@@ -79,6 +79,15 @@ runs:
         ACTION_ROOT: ${{ github.action_path }}
       run: npm ci --prefix "$ACTION_ROOT/scripts/security/harness" --ignore-scripts --no-audit --no-fund
 
+    - name: Validate installed Harness transport
+      id: transport
+      continue-on-error: true
+      shell: bash
+      env:
+        ACTION_ROOT: ${{ github.action_path }}
+        DSH_TEST_CLI: ${{ github.action_path }}/scripts/security/harness/node_modules/@deepseek-ai/dsh/lib/bin.js
+      run: python3 -m unittest discover -s "$ACTION_ROOT/tests/deployment" -v
+
     - name: Review all parts and verify all candidates
       shell: bash
       env:
@@ -88,6 +97,7 @@ runs:
         AUDIT_HEAD: ${{ steps.context.outputs.head }}
         AUDIT_TARGET: ${{ github.workspace }}/${{ steps.context.outputs.checkout_path }}
         REPORT_DIR: ${{ steps.context.outputs.report_dir }}
+        TRANSPORT_RESULT: ${{ steps.transport.outcome }}
         SECURITY_MODEL: ${{ inputs.model }}
         SECURITY_REASONING_EFFORT: ${{ inputs.reasoning-effort }}
         SECURITY_MAX_OUTPUT_TOKENS: ${{ inputs.max-output-tokens }}
